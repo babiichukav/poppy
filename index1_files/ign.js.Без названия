@@ -1,0 +1,650 @@
+
+(function() {
+    var domain = '.ign.com'; var cc = 'UA'; var akcc = 'UA';
+    if (cc && document.cookie.indexOf('geoCC') == -1) {
+      document.cookie='geoCC='+cc+';path=/;domain='+domain;
+      document.cookie='geoCC='+cc+';path=/;domain=.ziffdavisinternational.com';
+    }
+})();
+    
+
+window.ZiffIntl = {
+  SiteId: '',
+  AdKitId: '',
+  AdSlots: { },
+  AdKitTargeting: [],
+  GoogleAnalyticsInstance: 'intl',
+  DFPID: '',
+  VastTag: '',
+  VastTagRecirc: '',
+  VideoAdsTimeout: 10000,
+  VideoAdsLoadVideoTimeout: 15000,
+  VideoAdsRedirectLimit: 6,
+  VideoAdsLocale: 'en',
+  VideoAdsSkip: 5,
+  VideoEnableCTA: false,
+  OutbrainID: '',
+  OutbrainWidgetID: '',
+  TaboolaID: '',
+  GeoCC: '',
+  GDPR: 0,
+  GDPRApplies: false,
+  RootDomain: null,
+  isBot: (/bot|googlebot|crawler|spider|robot|crawling/i.test(navigator.userAgent)) ? true : false,
+
+  init: function(params) {
+    if (window._ziffIntlGeoBypassLoaded) { return; }
+    else { window._ziffIntlGeoBypassLoaded = true; }
+    var w = (params.w) ? params.w : window;
+    var z = w.ZiffIntl;
+    var geoCC = params.geoCC;
+    z.geoCC = geoCC;
+    if (geoCC && /be|bg|cz|dk|de|ee|ie|el|es|fr|hr|it|cy|lv|lt|lu|hu|mt|nl|at|pl|pt|ro|si|sk|fi|se|gb|uk/i.test(geoCC)) {
+      z.GDPRApplies = true;
+    }
+    var d = w.location.host.split('.').reverse();
+    z.RootDomain = d[1] + '.' + d[0];
+
+    var redirectUrl = z.getRedirect(params.redirectUrl, w, geoCC);
+    if (redirectUrl && z.isBot && redirectUrl.indexOf('blackfriday.') != -1) { redirectUrl = null; }
+
+    if (redirectUrl) {
+      if (params.editionUrl && redirectUrl.indexOf("://") == -1) {
+        redirectUrl = params.editionUrl + redirectUrl;
+      }
+      // FIXME: IGN ME hotfix
+      if (redirectUrl.indexOf("me.ign.com") != -1 && redirectUrl.indexOf("/en/") == -1) {
+        redirectUrl = redirectUrl.replace("me.ign.com/","me.ign.com/en/");
+      }
+      if (w.location.search && w.location.search.indexOf('pogodemo') !== -1) { return; }
+      z.doRedirect(redirectUrl);
+      return true;
+    }
+
+    if (params.GAUserID) {
+      z.GoogleAnalyticsInstance = 'intl';
+      z.initGA(params.GAUserID, z.GoogleAnalyticsInstance, w);
+      z.initGAOverrides(w);
+    }
+
+    z.initCustomTracker(w);
+    z.initAdkit(w);
+    if (z.OutbrainID) { z.ready(z.initOutbrain); }
+    else if (z.TaboolaID) { z.ready(z.initTaboola); }
+    z.ready(z.fixVideoThumbs);
+    z.onLoad(z.fixVideoThumbs);
+  },
+
+  loadJS: function(url, w, attrs, callback) {
+    if (!w) { w = window; }
+    var s = w.document.createElement('script');
+    if (attrs) {
+      for (var k in attrs) { s.setAttribute(k, attrs[k]); }
+    }
+    s.type = 'text/javascript';
+    s.async = true;
+    if (url.indexOf("//") == 0) {
+      var useSSL = 'https:' == w.document.location.protocol;
+      s.src = (useSSL ? 'https:' : 'http:') + url;
+    } else { s.src = url; }
+    if (callback) {
+      s.onload = s.onreadystatechange = function() {
+        var rs = this.readyState;
+        if (rs && rs != 'complete' && rs != 'loaded') { return; }
+        try { callback(); } catch (e) {}
+      };
+    }
+    var x = w.document.getElementsByTagName('script')[0];
+    x.parentNode.insertBefore(s, x);
+  },
+
+  loadCSS: function(url, w, attrs) {
+    if (!w) { w = window; }
+    var s = w.document.createElement('link');
+    if (attrs) {
+      for (var k in attrs) { s.setAttribute(k, attrs[k]); }
+    }
+    s.type = 'text/css';
+    s.rel = 'stylesheet';
+    if (url.indexOf("//") == 0) {
+        var useSSL = 'https:' == w.document.location.protocol;
+        s.href = (useSSL ? 'https:' : 'http:') + url;
+    } else { s.href = url; }
+    w.document.getElementsByTagName('head')[0].appendChild(s);
+  },
+
+  ready: function(func, w) {
+    if (!func) { return; }
+    if (!w || !w.top) { w = window; }
+
+    if (w.document && w.document.readyState && w.document.readyState != 'loading') { return func(w); }
+
+    if (w.jQuery) { w.jQuery(function() { func(w); }); }
+    else if (w.addEventListener) { w.addEventListener('DOMContentLoaded', function() { func(w); }, false); }
+    else if (w.attachEvent) { window.attachEvent("onload", function() { func(w); }); }
+  },
+
+  onLoad: function(func, w) {
+    if (!func) { return; }
+    if (!w || !w.top) { w = window; }
+
+    if (w.document && w.document.readyState && w.document.readyState == 'complete') { return func(w); }
+
+    if (w.jQuery) { w.jQuery(w).load(function() { func(w); }); }
+    else if (w.addEventListener) { w.addEventListener("load", function() { func(w); }, false); }
+    else if (w.attachEvent) { window.attachEvent("onload", function() { func(w); }); }
+  },
+
+  fixVideoThumbs: function(w) {
+    if (!w) { w = window; }
+    if (!w.jQuery) { return }
+    w.jQuery('.video-embed-poster-image').each(function() {
+       var el = w.jQuery(this);
+       if (el.attr("src")) { return; }
+       if (el && el.unveil) { try { el.unveil(0); return; } catch (err) { } }
+       if (el.attr("data-original-retina")) { el.attr("src", el.attr("data-original-retina")); }
+       else if (el.attr("data-original")) { el.attr("src", el.attr("data-original")); }
+     });
+  },
+
+  readCookie: function(cookieName, w) {
+    if (!w) { w = window; }
+	var nameEQ = cookieName + "=";
+	var ca = w.document.cookie.split(';');
+	for(var i=0;i < ca.length;i++) {
+		var c = ca[i];
+		while (c.charAt(0)==' ') c = c.substring(1,c.length);
+		if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+	}
+	return null;
+  },
+
+  getQueryParameter: function(name, url) {
+    if (!url) { url = window.location.href; }
+    name = name.replace(/[\[\]]/g, '\$&');
+    var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+        results = regex.exec(url);
+    if (!results) return null;
+    if (!results[2]) return '';
+    return decodeURIComponent(results[2].replace(/\+/g, ' '));
+  },
+
+  detectGDPRConsent: function(w) {
+    var z = w.ZiffIntl;
+    if (!z.GDPRApplies) { z.GDPR = 0; }
+    var iabconsent = z.readCookie('euconsent', w);
+    if (iabconsent && iabconsent.indexOf('__') != -1) { z.GDPR=0; }
+    z.GDPR = 1;
+    return z.GDPR;
+  },
+
+  //
+  // REDIRECT-RELATED
+  //
+
+  getRedirect: function(redirectUrl, w, geo) {
+    var z = w.ZiffIntl;
+    var p = w.location.pathname;
+    if (p == "/v/" || p == '/v' || p == '/video/embed/content.html') { return ''; }
+    var pref = z.getRedirectPref(w);
+    if (pref && pref.match(/US|CA|GB|UK|AU|IE/i)) { return ''; }
+    return redirectUrl;
+  },
+
+  getRedirectPref: function(w) {
+    if (!w || !w.top) { w = window; }
+    if (w.location.search && w.location.search.match) {
+      var ccpref = w.location.search.match(new RegExp("setccpref=([^;&]+)"));
+      if (!ccpref && w.location.search.indexOf("utm_source=intl") != -1) { ccpref = ["US", "US"]; }
+      if (ccpref) {
+        var ed = ccpref[1].toUpperCase();
+        document.cookie = "geoPref="+ed+"; path=/; domain=."+window.ZiffIntl.RootDomain+";";
+        return ed;
+      }
+    }
+
+    var preferred = "";
+    if (!document.cookie) { return false; }
+    if (document.cookie.indexOf("i18n-ccpref=") != -1) {
+      preferred = document.cookie.match(new RegExp("i18n-ccpref=([^;&]+)"));
+      if (preferred) { preferred = preferred[1].toUpperCase(); }
+    }
+    if (document.cookie.indexOf("geoPref=") != -1) {
+      preferred = document.cookie.match(new RegExp("geoPref=([^;&]+)"));
+      if (preferred) { preferred = preferred[1].toUpperCase(); }
+    }
+    if (!preferred && document.cookie.indexOf("geoPermPref=") != -1) {
+      preferred = document.cookie.match(new RegExp("geoPermPref=([^;&]+)"));
+      if (preferred) { preferred = preferred[1].toUpperCase(); }
+    }
+    return preferred;
+  },
+
+  doRedirect: function(redirectUrl, w) {
+    if (!redirectUrl) { return; }
+    if (!w || !w.top) { w = window; }
+    if (/bot|googlebot|crawler|spider|robot|crawling/i.test(navigator.userAgent)) { return; }
+
+    w._ziffIntlGeoRedirect = redirectUrl;
+    w._DisableGeoRedirect = true;
+    if (redirectUrl.indexOf("http://http:") == 0) {
+      redirectUrl = redirectUrl.replace("http://http://", "http://");
+    }
+    if (redirectUrl.indexOf("https://https:") == 0) {
+      redirectUrl = redirectUrl.replace("https://https://", "https://");
+    }
+    window['ga-disable-UA-71985660-1'] = true;
+    window['ga-disable-UA-3705233-1'] = true;
+    window['ga-disable-UA-912124-1'] = true;
+    window['ga-disable-UA-2355437-1'] = true;
+
+    if (w.stop) { w.stop(); }
+    if (w.document.referrer) { w.document.cookie = 'utm_referrer='+encodeURIComponent(w.document.referrer)+'; path=/; domain=.'+window.ZiffIntl.RootDomain; }
+    w.location.replace(redirectUrl);
+    //w.document.write("<!--");
+    //w.document.title = '';
+    if (w.top !== w) {
+      w.top._ziffIntlGeoRedirect = redirectUrl;
+      w.top.location.replace(redirectUrl);
+      //w.top.document.write("<!--");
+      //w.top.document.title = '';
+    }
+    throw new Error("Page loading stopped");
+  },
+
+  //
+  // TRACKER-RELATED
+  //
+  initGA: function(GAUserID, GAInstanceID, w) {
+    if (!GAUserID) { return; }
+    if (!w || !w.top) { w = window; }
+
+    var gax = null;
+    if (typeof w.ga == 'undefined') {
+      //Alternative method
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+        (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(w, w.document,'script','https://www.google-analytics.com/analytics.js','ga');
+      gax = w.ga;
+    } else if (w.location.hostname.indexOf("mashable.com") != -1) {
+        (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+        (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(w, w.document,'script','https://www.google-analytics.com/analytics.js','gaIntl');
+      gax = w.gaIntl;
+    } else { gax = w.ga; }
+
+    gax('create', GAUserID, w.ZiffIntl.RootDomain, GAInstanceID);
+    gax(GAInstanceID+'.set', 'anonymizeIp', true); gax(GAInstanceID+'.set', 'displayFeaturesTask', null);
+    if (w.location.href.indexOf('widgets.ign.com') == -1 && w.location.pathname != '/v/') {
+        gax(GAInstanceID+'.send', 'pageview');
+    }
+
+  },
+
+  initGAOverrides: function(w) {
+    if (!w || !w.top) { w = window; }
+    var z = w.ZiffIntl;
+    if (!z || !z.GoogleAnalyticsInstance) { return; }
+
+    if (w.AM && w.AM.Analytics) {
+      if (w.AM.Analytics.triggerGA && !w.AM.Analytics._triggerGA) { w.AM.Analytics._triggerGA = w.AM.Analytics.triggerGA; }
+      w.AM.Analytics.triggerGA = function(url) {
+        w.AM.Analytics._triggerGA(url);
+        w.ga(z.GoogleAnalyticsInstance+'.send', 'pageview');
+        w._pviewTracked = (w._pviewTracked) ? w._pviewTracked = 1 : w._pviewTracked + 1;
+        return true;
+      }
+    }
+  },
+
+  trackEvent: function(event, params) {
+    var w = window;
+    try {
+      if (!w.ga && w.top.ga) { w = window.top; }
+      if (!w.ga) { return; }
+    } catch (err) { return; }
+    var GAInstanceID = w.ZiffIntl.GoogleAnalyticsInstance;
+    if (params) {
+      params.unshift("event");
+      params.unshift(GAInstanceID+".send");
+      w.ga.apply(ga, params);
+    } else {
+      w.ga(GAInstanceID+'.send', 'event', event);
+    }
+  },
+
+  initCustomTracker: function(w) { },
+  initSuggestionBar: function(w) { },
+
+  //
+  // ADKIT-RELATED
+  //
+
+  getVideoAdManager: function(url, recirc) {
+    return url;
+  },
+
+  buildVastAdTagUrl: function(videoId, pageType, adlytics, special, isRecirc) {
+    var w = window;
+    var tag = (isRecirc && w.ZiffIntl.VastTagRecirc) ? w.ZiffIntl.VastTagRecirc : w.ZiffIntl.VastTag;
+    if (!tag) { return ''; }
+    var cb = (Math.floor(Math.random() * 9000000) + 1);
+    var url = '';
+    try { url = encodeURIComponent(w.top.location.href); }
+    catch (e) { url = encodeURIComponent(w.location.href); }
+    return tag.replace("%%CACHEBUSTER%%",cb).replace("%%REFERRER_URL_ESC_ESC%%", url);
+  },
+
+  resetAdkit: function(w) {
+    try {
+      var s = document.getElementsByTagName('script');
+      var tot = s.length;
+      for (var i = 0; i < tot; i++) {
+        if (s[i] && s[i].src && s[i].src.indexOf('partner.googleadservices.com/gpt/pubads_impl') != -1) { s[i].onload = null; s[i].onerror = null; s[i].parentNode.removeChild(s[i]); }
+        if (s[i] && s[i].src && s[i].src.indexOf('www.googletagservices.com/tag/js/gpt.js') != -1) { s[i].onload = null; s[i].onerror = null; s[i].parentNode.removeChild(s[i]); }
+        if (s[i] && s[i].src && s[i].src.indexOf('securepubads.g.doubleclick.net/tag/js/gpt.js') != -1) { s[i].onload = null; s[i].onerror = null; s[i].parentNode.removeChild(s[i]); }
+        }
+    } catch (err) { debug("GPT pubads unload warning - "+err); }
+
+    if (w.googletag) {
+      if (w.googletag.pubads) {
+        w.googletag.pubads().disableInitialLoad();
+        w.googletag.pubads().clear();
+        w.googletag.pubads().clearCategoryExclusions();
+        w.googletag.pubads().clearTagForChildDirectedTreatment();
+      }
+      if (w.googletag.impl) { w.googletag.impl = null; }
+      if (w.googletag.pubads) { w.googletag.pubads = null; }
+      w.googletag.defineSlot = null;
+      w.googletag.defineOutOfPageSlot = null;
+      w.googletag.enableServices = null;
+      if (w.google_persistent_state) { w.google_persistent_state = null; }
+    }
+    w.googletag = null;
+    w.googletag = { }; w.googletag.cmd = [];
+
+    // Iframes cleanup - completely unnecessary, works even w/o it
+    var ifrs = document.getElementsByTagName('iframe')
+    var tot = ifrs.length;
+    for (var i = 0; i < tot; i++) {
+      var el = ifrs[i];
+      if (!el || !el.id || el.id.indexOf('google_ads_iframe_') != 0) { continue; }
+      if (el.parentNode.id.indexOf('google_ads_iframe_') == 0) { el = el.parentNode; }
+      el.parentNode.removeChild(el);
+    }
+    var ifrs = document.getElementsByTagName('iframe')
+    var tot = ifrs.length;
+    for (var i = 0; i < tot; i++) {
+      var el = ifrs[i];
+      if (!el || !el.id || el.id.indexOf('google_ads_iframe_') != 0) { continue; }
+      if (el.parentNode.id.indexOf('google_ads_iframe_') == 0) { el = el.parentNode; }
+      el.parentNode.removeChild(el);
+    }
+  },
+
+  setAdkitTargeting: function(w, extraTargeting) {
+    if (!w || !w.top) { w = window; }
+
+    var d = (w.SugarAds && w.SugarAds.adsData) ? w.SugarAds.adsData : {};
+    for (var k in d) {
+        if (k == "adsDisabled" || k.indexOf("dfp_") == 0) { continue; }
+        googletag.pubads().setTargeting(k, d[k]);
+    }
+    d = (w.ChessKit && w.ChessKit.data) ? w.ChessKit.data : {};
+    for (var k in d) {
+        if (k == "adsDisabled" || k.indexOf("dfp_") == 0) { continue; }
+        googletag.pubads().setTargeting(k, d[k]);
+    }
+
+    if (extraTargeting) {
+        for (var k in extraTargeting) {
+            googletag.pubads().setTargeting(k, extraTargeting[k]);
+        }
+    }
+
+    try {
+        if (top.location.pathname == "/") {
+            googletag.pubads().setTargeting('pagetype', 'homepage');
+        }
+        googletag.pubads().setTargeting("url", top.location.href);
+
+        if (w.location.search && (w.location.search.indexOf("special") != -1 || w.location.search.indexOf("adtest") != -1)) {
+            var s = w.location.search.match(new RegExp("(\?|&)special=([^&]*)"));
+            w.googletag.pubads().setTargeting('special', (s) ? s[2] : 'adtest');
+        }
+    } catch(err) { }
+
+  },
+
+  initOutbrain: function(w) {
+    if (!w || !w.top) { w = window; }
+    if (!w.jQuery || !w.ZiffIntl.OutbrainID) { return; }
+    w.jQuery("div.OUTBRAIN").each(function() {
+      var el = w.jQuery(this);
+      var idx = w.ZiffIntl.OutbrainID;
+      var widgetId = w.ZiffIntl.OutbrainWidgetID || 'AR_1';
+      if (el.data("ob-template") == idx) { return; }
+      var attnames = ['data-ob-mark', 'data-browser', 'data-os', 'data-dynload', 'id'];
+      for (var i = 0; i < attnames.length; i++) {
+        if (el.attr(attnames[i])) { el.removeAttr(attnames[i]); }
+      }
+      el.html("");
+      el.data("ob-template", widgetId);
+      el.attr("data-ob-template", idx);
+      w.ZiffIntl.loadJS("https://widgets.outbrain.com/outbrain.js", w);
+    });
+    w.jQuery("#taboola-container, .taboola-container, #taboola-below-article-thumbnails, .zergnet-container").each(function() {
+      var el = w.jQuery(this);
+      var idx = w.ZiffIntl.OutbrainID;
+      var widgetId = w.ZiffIntl.OutbrainWidgetID || 'AR_1';
+      el.html('');
+      el.html('<div class="OUTBRAIN" data-src="'+w.location.href+'" data-widget-id="'+widgetId+'" data-ob-template="'+idx+'"></div>');
+      w.ZiffIntl.loadJS("https://widgets.outbrain.com/outbrain.js", w);
+    });
+
+  },
+
+  initTaboola: function(w) {
+    if (!w || !w.top) { w = window; }
+    if (!w.jQuery || !w.ZiffIntl.TaboolaID) { return; }
+    var el = w.jQuery(".zergnet-container, div[id^=zergnet-widget]");
+    if (!el.length) { return; }
+    el.html('');
+    el.eq(0).html('<div id="taboola-below-article-thumbnails"></div>');
+
+    w._taboola=w._taboola||[];
+    w._taboola.push({article:"auto"});
+    w._taboola.push({mode:"thumbnails-a", container:"taboola-below-article-thumbnails", placement:"Below Article Thumbnails", target_type:"mix"});
+    w._taboola.push({flush:!0});
+    w.ZiffIntl.loadJS("//cdn.taboola.com/libtrc/"+w.ZiffIntl.TaboolaID+"/loader.js", w);
+
+  },
+
+  preprocessHtml: function(w) { },
+
+  initAdkit: function(w) { },
+
+  renderAdkit: function(w) {
+    if (!w || !w.top) { w = window; }
+    var googletag = w.googletag;
+    var adSlots = [];
+    for (var slotId in w.ZiffIntl.AdSlots) {
+      if (!slotId) { continue; }
+      var el = w.document.getElementById(slotId);
+      if (!el) { continue; }
+      if (googletag) { googletag.display(slotId); }
+      adSlots.push(slotId);
+      if (slotId.indexOf("300") == -1 && slotId.indexOf("728") == -1 && slotId.indexOf("king") == -1 && slotId.indexOf("queen") == -1) { continue; }
+      el.style.height = "auto";
+    }
+    if (googletag) { googletag.pubads().refresh(); }
+
+    // Set a timed watchdog in case of botched adload
+    setTimeout(function() { w.ZiffIntl.checkAdkit(w); }, 1000);
+    return adSlots;
+  },
+
+  checkAdkit: function(w) {
+    if (!w || !w.top) { w = window; }
+    if (!w.ZiffIntl || !w.ZiffIntl.AdKitId) { return; }
+    var hasAds = false;
+    var els = w.document.getElementsByTagName('iframe');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.id && el.id.indexOf('google_ads_iframe_') != -1) {
+        hasAds = true;
+      }
+      if (el.id && el.id.indexOf(w.ZiffIntl.AdKitId) != -1) {
+        return;
+      }
+    }
+    if (!hasAds) { return w.ZiffIntl.initAdkit(w); }
+    // No rendered ad found - retry a refresh
+    w.ZiffIntl.renderAdkit(w);
+  },
+
+  stopPageLoadAndExit: function(status) {
+    function stopEvents(e) {
+        if (e.stopPropagation) { e.stopPropagation(); }
+        if (e.preventDefault) { e.preventDefault(); }
+        return false;
+    }
+    window.addEventListener('error', stopEvents, false);
+    var handlers = [
+        'copy', 'cut', 'paste',
+        'beforeunload', 'blur', 'change', 'click', 'contextmenu', 'dblclick', 'focus', 'keydown', 'keypress', 'keyup', 'mousedown', 'mousemove', 'mouseout', 'mouseover', 'mouseup', 'resize', 'scroll',
+        'DOMNodeInserted', 'DOMNodeRemoved', 'DOMNodeRemovedFromDocument', 'DOMNodeInsertedIntoDocument', 'DOMAttrModified', 'DOMCharacterDataModified', 'DOMElementNameChanged',
+        'DOMAttributeNameChanged', 'DOMActivate', 'DOMFocusIn', 'DOMFocusOut', 'online', 'offline', 'textInput',
+        'abort', 'close', 'dragdrop', 'load', 'paint', 'reset', 'select', 'submit', 'unload'
+    ];
+    for (var i=0; i < handlers.length; i++) {
+        window.addEventListener(handlers[i], stopEvents, true);
+    }
+    if (window.stop) { window.stop(); }
+    document.write('<!-- --><html><body></body></html>');
+    throw '';
+  }
+
+}
+
+
+ZiffIntl.getRedirect = function(redirectUrl, w, geo) {
+    if (!w || !w.top) { w = window; }
+    var p = w.location.pathname;
+    if (p == "/v/" || p == '/v' || p == '/video/embed/content.html') { return ''; }
+    if (w.document.cookie.match(/-US-www-1|-UK-uk-1|-AU-au-1|-IE-ie-1|-CA-ca-1/gi)) { return ''; }
+    var z = w.ZiffIntl;
+    var preferred = z.getRedirectPref(w);
+    if (preferred && preferred.match(/US|UK|AU|CA/gi)) { return ''; }
+
+    if (redirectUrl) { return redirectUrl; }
+    var loc = (w && w.location) ? w.location : window.location;
+    var m = loc.pathname.match(/^\/($|ps4|ps3|tech|tv|movies|xbox-one|xbox-360|videos|wii|wii-u|ds|3ds|comics|games\/reviews|ps-vita)$/i);
+    if (m) { redirectUrl = m[0].replace("/wii-u","/wii").replace("/games/reviews","/article/review").replace("/videos","/video").replace("/ps-vita","/vita"); }
+    if (redirectUrl && redirectUrl.indexOf("/m/") != 0 && loc.hostname == 'm.ign.com') { redirectUrl = "/m" + redirectUrl; }
+
+    return redirectUrl;
+};
+
+ZiffIntl.preprocessHtml = function(w) {
+  if (!w || !w.top) { w = window; }
+  if (!w.document.getElementById('sugarad-728x90') && !w.document.getElementById('king')) {
+      if (w.document.getElementById('videoplayer-page')) {
+          var cnt = w.document.getElementById('videoplayer-page').firstElementChild;
+          var el = w.document.createElement('div');
+          el.id = 'king'; el.align = 'center';
+          el.style.display = 'block';
+          el.style.marginLeft = 'auto'; el.style.marginRight = 'auto';
+          cnt.insertBefore(el, cnt.firstElementChild);
+      } else if (w.document.getElementsByTagName('section').length && w.document.querySelector){
+        var el = w.document.getElementsByTagName('section')[0];
+        var elSide = w.document.querySelector('#sidebar.chess')
+        if (el && el.className.indexOf('ign-pre-grid') != -1 && !el.firstElementChild && !w.document.documentElement.getAttribute("data-kraken-env")) {
+        el.innerHTML = '<div class="ad-placement ad-leaderboard"><div id="king" class="sugarad chess"></div></div>';
+        }
+        if (elSide){
+        elSide.innerHTML = '<div id="queen" class="sugarad chess"></div>'
+        }
+      }
+  }
+}
+
+ZiffIntl._chooseEl = function(w, name1, name2, name3, name4, name5, name6) {
+  if (!w || !w.top) { w = window; }
+  if (name1 && w.document.getElementById(name1)) { return name1; }
+  if (name2 && w.document.getElementById(name2)) { return name2; }
+  if (name3 && w.document.getElementById(name3)) { return name3; }
+  if (name4 && w.document.getElementById(name4)) { return name4; }
+  if (name5 && w.document.getElementById(name5)) { return name5; }
+  if (name6 && w.document.getElementById(name6)) { return name6; }
+
+  return '';
+};
+
+ZiffIntl._initAdkitRetries = 0;
+ZiffIntl.initAdkit = function(w) {
+  if (!w || !w.top) { w = window; }
+  if (w.top != w) { return; }
+  if (!w.ZiffIntl.DFPID) { return; }
+  w.ZiffIntl.AdKitId = w.ZiffIntl.DFPID;
+  if (!w.ZiffIntl._chooseEl(w, 'king', 'sugarad-728x90', 'queen', 'sugarad-300x250', 'sugarad-300x250-1') && !w.ZiffIntl._initAdkitRetries) { w.ZiffIntl._initAdkitRetries = 1; setTimeout(ZiffIntl.initAdkit, 400); }
+  w.ZiffIntl.resetAdkit(w);
+  w.ZiffIntl.preprocessHtml(w);
+
+  // Setup and Init adkit
+  w.googletag = {}; w.googletag.cmd = [];
+  w.ZiffIntl.AdSlots = { }
+  w.googletag.cmd.push(function() {
+    googletag.pubads().enableAsyncRendering();
+    googletag.pubads().enableSingleRequest();
+    googletag.pubads().disableInitialLoad();
+    googletag.pubads().collapseEmptyDivs();
+    googletag.pubads().setCentering(true);
+
+    w.ZiffIntl.AdSlots = { }
+    if (w.location.href.indexOf("m.ign.com") == -1) {
+      var dfp = w.ZiffIntl.DFPID + "IGN_US_ROS_";
+      var s = w.ZiffIntl._chooseEl(w, 'king', 'sugarad-728x90');
+      w.ZiffIntl.AdSlots[s] = googletag.defineSlot(dfp+'billboard', [[970, 250], [970, 180], [970, 90], [728, 90]], s).addService(googletag.pubads());
+      s = w.ZiffIntl._chooseEl(w, 'queen', 'sugarad-300x250');
+      if (s) { w.ZiffIntl.AdSlots[s] = googletag.defineSlot(dfp+'mrec1', [[300, 250], [300, 600]], s).addService(googletag.pubads()); }
+
+      s = w.ZiffIntl._chooseEl(w, 'rook', 'sugarad-s728x90');
+      if (s) { w.ZiffIntl.AdSlots[s] = googletag.defineSlot(dfp+'footer', [[728, 90], [970, 90]], s).addService(googletag.pubads()); }
+
+      s = w.ZiffIntl._chooseEl(w, 'knight', 'sugarad-side300x250','sugarad-s300x250');
+      if (s) { w.ZiffIntl.AdSlots[s] = googletag.defineSlot(dfp+'mrec2', [[300, 250], [300, 600]], s).addService(googletag.pubads()); }
+
+      s = w.ZiffIntl._chooseEl(w, 'pawn31', 'sugarad-300x100');
+      if (s) { w.ZiffIntl.AdSlots[s] = googletag.defineSlot(dfp+'rectangle', [300, 100], s).addService(googletag.pubads()); }
+      s = w.ZiffIntl._chooseEl(w, 'bishop', 'sugarad-1x1','sugarad-3x3');
+      if (s) { w.ZiffIntl.AdSlots[s] = googletag.defineSlot(dfp+'interstitial', [1, 1], s).addService(googletag.pubads()); }
+
+    } else {
+      // Mobile
+      var dfp = w.ZiffIntl.DFPID + 'IGN_MOBILE_';
+      w.ZiffIntl.AdSlots['sugarad-300x250-1'] = googletag.defineSlot(dfp+'mrec', [300, 250], 'sugarad-300x250-1').addService(googletag.pubads());
+      w.mobileMedrecAdSlots = new Array(w.ZiffIntl.AdSlots['sugarad-300x250-1']);
+      w.ZiffIntl.AdSlots['sugarad-1x1'] = googletag.defineSlot(dfp+'interstitial', [1, 1], 'sugarad-1x1').addService(googletag.pubads());
+    }
+
+    w.ZiffIntl.setAdkitTargeting(w);
+
+    googletag.enableServices();
+  });
+
+  w.googletag.cmd.push(function() {
+   w.ZiffIntl.renderAdkit(w);
+  });
+
+  w.ZiffIntl.loadJS("https://securepubads.g.doubleclick.net/tag/js/gpt.js");
+
+};
+
+
+window.ZiffIntl.initCustomTracker = function(w) {
+  if (!w || !w.top) { w = window; }
+  (function(d,w,c){(w[c]=w[c]||[]).push(function(){try{w.yaCounter21436099=new Ya.Metrika({id:21436099,clickmap:true,trackLinks:true,accurateTrackBounce:true})}catch(e){}});var n=d.getElementsByTagName("script")[0],s=d.createElement("script"),f=function(){n.parentNode.insertBefore(s,n)};s.type="text/javascript";s.async=true;s.src=(d.location.protocol=="https:"?"https:":"http:")+"//mc.yandex.ru/metrika/watch.js";if(w.opera=="[object Opera]"){d.addEventListener("DOMContentLoaded",f,false)}else{f()}})(w.document,w,"yandex_metrika_callbacks");
+}
+if (window.ZiffIntl) { window.ZiffIntl.init({ redirectUrl: '', siteId: 'ign_ru', editionUrl: 'https://ru.ign.com', GAUserID: 'UA-38803731-1', geoCC: 'UA', geoPref: '' }); }
+/* https://www.ign.com/wikis/five-nights-at-freddys-security-breach/11:00_PM */
